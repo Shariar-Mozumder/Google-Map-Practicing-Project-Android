@@ -2,4 +2,13 @@
     <string name="app_name">MyGoogleMap</string>
     <string name="action_settings">Settings</string>
     <string name="API_KEY">AIzaSyBcGggwvttxNgerw8kLXStkznHQ_cowrnc</string>
+
+    <plurals name="num_locations_reported">
+        <item quantity="zero">No location reported</item>
+        <item quantity="one">One location reported</item>
+        <item quantity="other">%d location reported</item>
+
+
+    </plurals>
+
 </resources>

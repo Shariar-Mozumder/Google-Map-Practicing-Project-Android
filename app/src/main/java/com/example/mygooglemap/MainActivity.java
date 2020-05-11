@@ -1,15 +1,23 @@
 package com.example.mygooglemap;
 
 import android.Manifest;
+import android.app.AlertDialog;
 import android.app.Dialog;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Address;
 import android.location.Geocoder;
+import android.location.Location;
+import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
@@ -19,22 +27,31 @@ import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.snackbar.Snackbar;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import android.os.HandlerThread;
+import android.os.Looper;
 import android.os.PersistableBundle;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.IOException;
@@ -44,13 +61,20 @@ import java.util.Locale;
 public class MainActivity extends AppCompatActivity implements OnMapReadyCallback {
 
     private static final String TAG = "MapDebug";
+    private static final int GPS_REQUEST_CODE = 9003;
     private boolean mLocationPermissionGranted;
     private  static final int PERMISSION_REQUEST_CODE=9001;
     private  static final int PLAY_SERVICE_ERROR_CODE=9002;
     private GoogleMap mgoogleMap;
 
+    private TextView cordinateText;
+
     private EditText msearcheaddress;
     private ImageButton mbtnlocate;
+    private Button batch_button;
+    private FusedLocationProviderClient mProviderClient;
+    private LocationCallback mLocationCallback;
+    HandlerThread mhandlerThread;
 
     private final double feni_latitude=23.047462;
     private final double feni_logitude=91.365476;
@@ -64,9 +88,45 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
+        cordinateText=findViewById(R.id.coordinate_TV_id);
         msearcheaddress=findViewById(R.id.edit_address);
         mbtnlocate=findViewById(R.id.imageButton);
-       // mbtnlocate.setOnClickListener(this::geoLocate);
+        batch_button=findViewById(R.id.batch_button);
+        batch_button.setOnClickListener(this::batchLocationButtonClicked);
+       mbtnlocate.setOnClickListener(this::geoLocate);
+
+       mProviderClient=new FusedLocationProviderClient(this);
+       mLocationCallback= new LocationCallback(){
+
+           @Override
+           public void onLocationResult(LocationResult locationResult) {
+
+               if(locationResult==null){
+                   return;
+               }
+               Location location=locationResult.getLastLocation();
+
+             /*  runOnUiThread(new Runnable() {
+                   @Override
+                   public void run() {*/
+                       cordinateText.setText(location.getLatitude()+" "+location.getLongitude());
+
+                       gotolocation(location.getLatitude(),location.getLongitude());
+                       showmarker(location.getLatitude(),location.getLongitude());
+
+                    /*   Log.d(TAG, "run: inside runonUitread method"+Thread.currentThread().getName());
+                   }
+               });*/
+
+
+
+               Toast.makeText(MainActivity.this, location.getLatitude()+" "+location.getLongitude(), Toast.LENGTH_SHORT).show();
+               Log.d(TAG, "onLocationResult: "+location.getLatitude()+" "+location.getLongitude());
+
+           }
+       };
+
+
 
 
 
@@ -91,7 +151,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                         }
                     });
 
-                 double bottomboundary=23.048843;
+                /* double bottomboundary=23.048843;
                   double leftboundary= 91.360974;
                   double topboundary=23.051153;
                   double rightboundary=91.363174;
@@ -101,8 +161,8 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                             new LatLng(topboundary,rightboundary));
 
                   mgoogleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(home_bounds.getCenter(),3));
-                    showmarker(home_bounds.getCenter());
-                    mgoogleMap.setLatLngBoundsForCameraTarget(home_bounds);
+                    //showmarker(home_bounds.getCenter());
+                    mgoogleMap.setLatLngBoundsForCameraTarget(home_bounds);*/
                 }
             }
         });
@@ -113,13 +173,16 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         //mapView.onCreate(savedInstanceState);
         //mapView.getMapAsync(this);
 
-        SupportMapFragment supportMapFragment= (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map_fragment_id);
-        supportMapFragment.getMapAsync(this);
 
 
         }
 
-       private void geoLocate(View view){
+    private void batchLocationButtonClicked(View view) {
+        Intent intent=new Intent(MainActivity.this,BatchLocationActivity.class);
+        startActivity(intent);
+    }
+
+    private void geoLocate(View view){
         hideSoftKeyboard(view);
         String locationName=msearcheaddress.getText().toString();
             Geocoder geocoder=new Geocoder(this, Locale.getDefault());
@@ -149,37 +212,69 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         Log.d(TAG, "onMapReady: Map is showing");
         mgoogleMap=googleMap;
 
-       MarkerOptions markerOptions=new MarkerOptions().title("Bristy,I love You").position(new LatLng(0.0,0.0));
-        mgoogleMap.addMarker(markerOptions);
+      // MarkerOptions markerOptions=new MarkerOptions().title("Bristy,I love You").position(new LatLng(0.0,0.0));
+        //mgoogleMap.addMarker(markerOptions);
         gotolocation(feni_latitude,feni_logitude);
 
-        mgoogleMap.getUiSettings().setZoomControlsEnabled(true);
-        mgoogleMap.getUiSettings().setMapToolbarEnabled(true);
+      //  mgoogleMap.setMyLocationEnabled(true);
+        //mgoogleMap.getUiSettings().setZoomControlsEnabled(true);
+      // mgoogleMap.getUiSettings().setMapToolbarEnabled(true);
+      // mgoogleMap.getUiSettings().setMyLocationButtonEnabled(true);
 
     }
 
     private void gotolocation(double lat,double lng){
         LatLng latLng=new LatLng(lat,lng);
-        CameraUpdate cameraUpdate= CameraUpdateFactory.newLatLngZoom(latLng,18);
+        CameraUpdate cameraUpdate= CameraUpdateFactory.newLatLngZoom(latLng,15);
         mgoogleMap.moveCamera(cameraUpdate);
 
     }
 
-   private void showmarker(LatLng latLng){
+   private void showmarker(double lat,double lng){
         MarkerOptions markerOptions=new MarkerOptions();
-        markerOptions.position(latLng);
+        markerOptions.position(new LatLng(lat,lng));
         mgoogleMap.addMarker(markerOptions);
     }
 
         private void initGoogleMap(){
              if(isServicesOK()){
-                 if(checkpermission()){
-                     Toast.makeText(this, "Map is Ready", Toast.LENGTH_SHORT).show();
+                 if(isGPSEnabled()){
+                     if(checkpermission()){
+                         Toast.makeText(this, "Map is Ready", Toast.LENGTH_SHORT).show();
+                         SupportMapFragment supportMapFragment= (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map_fragment_id);
+                         supportMapFragment.getMapAsync(this);
+
+                     }
+                     else{
+                         requestLocationPermission();
+                     }
                  }
-                 else{
-                     requestLocationPermission();
-                 }
+
              }
+        }
+
+        private boolean isGPSEnabled(){
+
+            LocationManager locationManager= (LocationManager) getSystemService(LOCATION_SERVICE);
+            boolean providerenabled=locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+
+            if(providerenabled){
+                return true;
+            }
+            else{
+                AlertDialog alertDialog=new AlertDialog.Builder(this)
+                        .setTitle("GPS Permission")
+                        .setMessage("GPS Permission is required")
+                        .setPositiveButton("Yes",(dialog, which) -> {
+                            Intent intent=new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+                            startActivityForResult(intent,GPS_REQUEST_CODE);
+                        })
+                        .setCancelable(false)
+                        .show();
+            }
+
+
+            return false;
         }
 
     private boolean checkpermission() {
@@ -250,9 +345,31 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                 mgoogleMap.setMapType(GoogleMap.MAP_TYPE_HYBRID);
                 break;
             }
+            case R.id.current_location:{
+               // getCurrentLocation();
+                getLocationUpdates();
+                break;
+            }
         }
 
         return super.onOptionsItemSelected(item);
+    }
+
+    private void getCurrentLocation() {
+        mProviderClient.getLastLocation().addOnCompleteListener(new OnCompleteListener<Location>() {
+            @Override
+            public void onComplete(@NonNull Task<Location> task) {
+                if(task.isSuccessful()){
+                    Location location=task.getResult();
+                    gotolocation(location.getLatitude(),location.getLongitude());
+                    mgoogleMap.addMarker(new MarkerOptions().position(
+                            new LatLng(location.getLatitude(),location.getLongitude())));
+                }
+                else{
+                    Toast.makeText(MainActivity.this, "Error on my location", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
     }
 
     @Override
@@ -268,8 +385,63 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
 
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
 
-   /* @Override
+        LocationManager locationManager= (LocationManager) getSystemService(LOCATION_SERVICE);
+        boolean providerenabled=locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+
+        if(requestCode==GPS_REQUEST_CODE){
+            if(providerenabled){
+                Toast.makeText(this, "GPS is Enabled", Toast.LENGTH_SHORT).show();
+            }
+            else{
+                Toast.makeText(this, "GPS is not Enabled, Unable to Show user Location", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    private void getLocationUpdates(){
+        LocationRequest locationRequest=LocationRequest.create();
+
+        locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+        locationRequest.setInterval(5000);
+        locationRequest.setFastestInterval(1000);
+
+        if(ActivityCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)
+        !=PackageManager.PERMISSION_GRANTED){
+            return;
+        }
+
+
+        mhandlerThread = new HandlerThread("LocationCallbackThread");
+        mhandlerThread.start();
+
+        mProviderClient.requestLocationUpdates(locationRequest,mLocationCallback,mhandlerThread.getLooper());
+
+
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        if(mLocationCallback!=null){
+            mProviderClient.removeLocationUpdates(mLocationCallback);
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if(mhandlerThread!=null){
+            mhandlerThread.quit();
+        }
+
+    }
+
+    /* @Override
     protected void onStart() {
         super.onStart();
         mapView.onStart();
